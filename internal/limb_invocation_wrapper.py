@@ -94,7 +94,17 @@ class LimbInvoker(object):
             conn, addr = incoming_data_server.accept()
             data = None
             try:
-                data = conn.recv(16384)
+                # 16384 -> 65536. Measured on a 102-show 9:30 Club pass: the
+                # scraper's package dills to 23 KB, but the normaliser's carries
+                # both raw_concerts and concerts and reaches 39 KB, so 32768 fixed
+                # the first hop and still truncated the second.
+                #
+                # Still a single unframed read, so this is headroom, not a fix: at
+                # roughly 380 bytes per show it runs out again near 170 shows on one
+                # page. The real fix is a framing layer -- see the TODO in
+                # broker_communicator.py -- because a recv() can also return short
+                # below the buffer size when a payload spans TCP segments.
+                data = conn.recv(65536)
             except ConnectionResetError as e:
                 conn.close()
                 incoming_data_server.close()
