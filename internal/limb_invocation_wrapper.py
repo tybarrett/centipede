@@ -8,6 +8,11 @@ import time
 from centipede.internal import centipede_logger
 from centipede.internal.ip_address import ip as LIMB_IP
 
+# How long the limb thread blocks when its queue is empty before looking again.
+# A bounded wait rather than an unbounded one so a missed signal costs one
+# interval of latency instead of wedging the limb forever.
+IDLE_WAIT_SECONDS = 1.0
+
 
 class LimbInvoker(object):
     def __init__(self, limb_class, config, broker_ip, broker_port, limb_port):
@@ -22,6 +27,10 @@ class LimbInvoker(object):
         self.limb_port = limb_port
 
         self.ingest_data_lock = threading.Lock()
+        # Set by the ingestion server when it hands this invoker a job, waited
+        # on by the limb thread. Without it that thread has nothing to block on
+        # and spins for as long as the pipeline is idle.
+        self.data_available = threading.Event()
         
         self.server_running = False
         self.ingestion_server_thread = threading.Thread(target=self.run_ingestion_server, args=(limb_port, ))
@@ -63,6 +72,14 @@ class LimbInvoker(object):
                 self.outgoing_data_client.connect((broker_ip, broker_port))
                 self.outgoing_data_client.sendall(pickled_package)
                 self.outgoing_data_client.close()
+            else:
+                # Nothing was handed to us. Wait to be signalled rather than
+                # looping straight back round: this loop has no other exit, so
+                # without a block here every limb process burns a core for as
+                # long as its queue is empty -- which, for a scraper on a six
+                # hour period, is nearly all of the time.
+                self.data_available.wait(IDLE_WAIT_SECONDS)
+                self.data_available.clear()
 
 
     def run_ingestion_server(self, limb_port):
@@ -104,6 +121,7 @@ class LimbInvoker(object):
                         self.incoming_package = new_package
                         self.incoming_data_point = inc_object["data_point"]
                         self.ingest_data_lock.release()
+                        self.data_available.set()
 
                 elif inc_object["type"] == "is_working":
                     pass
