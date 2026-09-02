@@ -5,7 +5,7 @@ import dill
 import uuid
 import time
 
-from centipede.internal import centipede_logger
+from centipede.internal import centipede_logger, wire
 from centipede.internal.ip_address import ip as LIMB_IP
 
 # How long the limb thread blocks when its queue is empty before looking again.
@@ -70,7 +70,7 @@ class LimbInvoker(object):
                 self.outgoing_data_client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 self.outgoing_data_client.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
                 self.outgoing_data_client.connect((broker_ip, broker_port))
-                self.outgoing_data_client.sendall(pickled_package)
+                wire.send_message(self.outgoing_data_client, pickled_package)
                 self.outgoing_data_client.close()
             else:
                 # Nothing was handed to us. Wait to be signalled rather than
@@ -94,23 +94,15 @@ class LimbInvoker(object):
             conn, addr = incoming_data_server.accept()
             data = None
             try:
-                # 16384 -> 65536. Measured on a 102-show 9:30 Club pass: the
-                # scraper's package dills to 23 KB, but the normaliser's carries
-                # both raw_concerts and concerts and reaches 39 KB, so 32768 fixed
-                # the first hop and still truncated the second.
-                #
-                # Still a single unframed read, so this is headroom, not a fix: at
-                # roughly 380 bytes per show it runs out again near 170 shows on one
-                # page. The real fix is a framing layer -- see the TODO in
-                # broker_communicator.py -- because a recv() can also return short
-                # below the buffer size when a payload spans TCP segments.
-                data = conn.recv(65536)
+                # Framed, so the size of a package is no longer this loop's
+                # problem: recv_message collects exactly as many bytes as the
+                # sender wrote, however many segments they arrive in.
+                data = wire.recv_message(conn)
             except ConnectionResetError as e:
                 conn.close()
                 incoming_data_server.close()
                 incoming_data_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 incoming_data_server.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-                host = socket.gethostbyname()
                 incoming_data_server.bind(("", limb_port))
                 incoming_data_server.listen()
                 continue
@@ -170,7 +162,7 @@ class LimbInvoker(object):
         outgoing_client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         outgoing_client.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         outgoing_client.connect((self.broker_ip, self.broker_port))
-        outgoing_client.sendall(dill.dumps(delivery))
+        wire.send_message(outgoing_client, dill.dumps(delivery))
         outgoing_client.close()
 
 

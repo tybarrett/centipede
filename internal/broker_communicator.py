@@ -2,6 +2,7 @@ import socket
 import dill
 from multiprocessing import Queue
 
+from centipede.internal import wire
 from centipede.internal.ip_address import ip as BROKER_IP
 
 BROKER_PORT = 10000
@@ -27,7 +28,7 @@ class BrokerCommunicator(object):
         outgoing_data_client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         outgoing_data_client.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         outgoing_data_client.connect((ip, port))
-        outgoing_data_client.sendall(dill.dumps(delivery))
+        wire.send_message(outgoing_data_client, dill.dumps(delivery))
         outgoing_data_client.close()
 
         # self.process_id_to_input_queue[process_id].put(delivery)
@@ -55,12 +56,13 @@ class BrokerCommunicator(object):
         conn, addr = broker_server.accept()
 
         while True:
-            data = conn.recv(2 ** 16) # TODO - put in a layer similar to TCP where we join our packets together?
+            data = wire.recv_message(conn)
 
-            return_string = incoming_data_handler(data)
+            if data:
+                return_string = incoming_data_handler(data)
 
-            if return_string:
-                conn.send(return_string)
+                if return_string:
+                    wire.send_message(conn, return_string)
 
             conn.close()
             conn, addr = broker_server.accept()
