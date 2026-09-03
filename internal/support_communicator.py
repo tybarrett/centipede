@@ -1,6 +1,8 @@
 import dill
 import socket
 
+from centipede.internal import wire
+
 SUPPORTER_PORT = 12000
 
 class SupportCommunicator(object):
@@ -20,12 +22,13 @@ class SupportCommunicator(object):
         conn, addr = broker_server.accept()
 
         while True:
-            data = conn.recv(2048)
+            data = wire.recv_message(conn)
 
-            return_string = incoming_data_handler(data)
+            if data:
+                return_string = incoming_data_handler(data)
 
-            if return_string:
-                conn.send(return_string)
+                if return_string:
+                    wire.send_message(conn, return_string)
 
             conn.close()
             conn, addr = broker_server.accept()
@@ -40,9 +43,9 @@ class SupportCommunicator(object):
         outgoing_data_client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         outgoing_data_client.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         outgoing_data_client.connect((broker_ip, broker_port))
-        outgoing_data_client.sendall(dill.dumps(new_process_info))
+        wire.send_message(outgoing_data_client, dill.dumps(new_process_info))
 
-        resp = outgoing_data_client.recv(2048)
+        resp = wire.recv_message(outgoing_data_client)
         outgoing_data_client.close()
         return resp
 
@@ -60,5 +63,5 @@ class SupportCommunicator(object):
         outgoing_data_client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         outgoing_data_client.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         outgoing_data_client.connect((broker_ip, broker_port))
-        outgoing_data_client.sendall(dill.dumps(new_process_info))
+        wire.send_message(outgoing_data_client, dill.dumps(new_process_info))
         outgoing_data_client.close()

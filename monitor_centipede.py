@@ -8,6 +8,7 @@ import socket
 import pickle
 import decimal
 
+from internal import wire
 from internal.ip_address import ip as BROKER_IP
 
 PORT = 10000
@@ -23,8 +24,8 @@ class CentipedeMonitor():
 
         outgoing_data_client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         outgoing_data_client.connect((BROKER_IP, PORT))
-        outgoing_data_client.sendall(pickle.dumps(delivery))
-        data = outgoing_data_client.recv(4096)
+        wire.send_message(outgoing_data_client, pickle.dumps(delivery))
+        data = wire.recv_message(outgoing_data_client)
         outgoing_data_client.close()
 
         return data
