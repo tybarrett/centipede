@@ -12,12 +12,19 @@ class UrlGenerator(object):
         self.logger = centipede_logger.create_logger(self.__class__.__name__, logging.DEBUG)
 
 
-    def iterate_pages(self):
-        while True:
-            # Pop thing off of IngestionQueue
-            resource_url = self.resource_queue.next_resource()
+    def iterate_pages(self, idle_wait_seconds=None):
+        """
+        Yields jobs as they come due, waiting for the next one in between.
 
-            yield resource_url
+        Yields None when a wait passes with nothing due, so a caller can do its
+        own periodic work between resources. How long that wait is comes from
+        idle_wait_seconds, or from the queue's own setting when not given.
+        """
+        if idle_wait_seconds is None:
+            idle_wait_seconds = self.resource_queue.idle_wait_seconds
+
+        while True:
+            yield self.resource_queue.next_resource(timeout=idle_wait_seconds)
 
 
     def add_to_queue(self, resources):

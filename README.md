@@ -29,3 +29,25 @@ Centipede allows the developer to architect a data ingestion pipeline using a sy
 * __YoutubeDownloader__ - Given a Youtube video, downloads the video and saves it to a given directory
 * __YoutubeScraper__ - Given the URL for a Youtube video, saves metadata for that Youtube video
 
+
+### Scheduling
+The `UrlGenerator` section of the config module decides what goes into the pipeline and when.
+
+    UrlGenerator = {"periodic": True,
+                    "period_seconds": 6 * 60 * 60,
+                    "throttled": True,
+                    "throttle_period_seconds": 45,
+                    "seed_urls": ["https://example.com/calendar",
+                                  {"url": "https://other.example/events",
+                                   "period_seconds": 15 * 60}]}
+
+A seed is either the resource itself or a dictionary carrying it alongside the settings that apply to that seed alone. `period_seconds` and `run_at_startup` can both be set per seed, and anything a seed leaves out falls back to the pipeline-wide value.
+
+* __run_at_startup__ - whether a seed is fetched as soon as the pipeline starts, or waits out a full period first. Defaults to `True`; the repeats keep the period either way.
+* __idle_wait_seconds__ - how long `iterate_pages()` waits for the next job before yielding `None` so the caller can do its own periodic work. Defaults to 1 second. A resource pushed onto the queue ends that wait early, so this is the idle cost rather than the latency.
+
+Seeds on different periods do not come due in queue order, so the queue hands over whichever job came due first.
+
+### Tests
+
+    python -m pytest tests
