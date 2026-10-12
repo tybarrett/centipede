@@ -311,6 +311,10 @@ class CentipedeBroker(object):
             self.limb_to_queue_lock[first_limb_name].release()
 
             if new_delivery:
+                self.process_id_busy_lock[free_process].acquire()
+                self.process_id_is_busy[free_process] = True
+                self.process_id_busy_lock[free_process].release()
+
                 new_delivery["process_id"] = free_process
                 self.timing_manager.record_process_input(free_process)
                 self.timing_manager.record_limb_input(first_limb_name)
